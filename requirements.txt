@@ -1,3 +1,4 @@
 python-telegram-bot
 feedparser
 schedule
+requests==2.31.0
