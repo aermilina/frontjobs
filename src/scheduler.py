@@ -1,41 +1,52 @@
 import asyncio
+from datetime import datetime, time, timedelta
 from src.parsers.rss_parser import get_latest_vacancies
 from src.parsers.json_parser import get_latest_json_vacancies
 from src.parsers.hhparser import fetch_vacancies
-from src.parsers.linkedinparser import fetch_linkedin_jobs
-from src.bot import send_message, get_updates  # Убедитесь, что эти функции асинхронные
-from constants import RSS_FEEDS, CHECK_INTERVAL, KEYWORDS,JSON_FEED, HH_URL, JOB_URL, RAPIDKEY, RAPIDHOST,TIMEOUT
-# Асинхронная версия функции job
-async def job():
-    # Получаем вакансии с RSS
-    while True:
-        await get_updates()
-        vacancies = get_latest_vacancies(RSS_FEEDS,KEYWORDS)
-        # Отправляем вакансии в канал
-        for title, link in vacancies:
-            await send_message(title, link)  # Используем await для асинхронной функции
-            await asyncio.sleep(TIMEOUT)
-        jsonvacancies = get_latest_json_vacancies(JSON_FEED,KEYWORDS)
-        for title, link in jsonvacancies:
-            await send_message(title, link)
-            await asyncio.sleep(TIMEOUT)  # Используем await для асинхронной функции
-        hhvacancies = fetch_vacancies(HH_URL)
-        for title, link in hhvacancies:
-            await send_message(title, link)
-            await asyncio.sleep(TIMEOUT)
-        await asyncio.sleep(CHECK_INTERVAL * 60)
-# Функция для запуска планировщика с использованием asyncio
-        #linkedin_vacancies = fetch_linkedin_jobs(JOB_URL, RAPIDKEY, RAPIDHOST)
-        #for title, link in linkedin_vacancies:
-            #await send_message(title, link)
-            #await asyncio.sleep(TIMEOUT)  # Wait for the specified timeout between sending messages
-        #await asyncio.sleep(CHECK_INTERVAL * 60)  # Wait for the specified interval before fetching vacancies again
-async def start_scheduler():
-    # Запуск цикла событий asyncio
-    loop = asyncio.get_event_loop()
+from src.bot import send_message, get_updates
+from constants import RSS_FEEDS, KEYWORDS, JSON_FEED, HH_URL, TIMEOUT
 
-    # Планирование задачи
-    loop.create_task(job())
+# Асинхронная задача, которая будет выполняться по расписанию
+async def job():
+    print(f"[{datetime.now()}] Начинается выполнение задачи...")
+    await get_updates()  # Получаем обновления асинхронно
+
+    # Получаем вакансии с RSS
+    rss_vacancies = get_latest_vacancies(RSS_FEEDS, KEYWORDS)
+    for title, link in rss_vacancies:
+        await send_message(title, link)
+        await asyncio.sleep(TIMEOUT)
+
+    # Получаем вакансии с JSON
+    json_vacancies = get_latest_json_vacancies(JSON_FEED, KEYWORDS)
+    for title, link in json_vacancies:
+        await send_message(title, link)
+        await asyncio.sleep(TIMEOUT)
+
+    # Получаем вакансии с HH
+    hh_vacancies = fetch_vacancies(HH_URL)
+    for title, link in hh_vacancies:
+        await send_message(title, link)
+        await asyncio.sleep(TIMEOUT)
+
+    print(f"[{datetime.now()}] Задача завершена.")
+
+# Функция для ожидания заданного времени
+async def wait_until(target_time: time):
+    """Ожидание до наступления указанного времени"""
+    now = datetime.now()
+    target = datetime.combine(now.date(), target_time)
+    if now > target:  # Если время уже прошло, ждем до следующего дня
+        target = datetime.combine(now.date() + timedelta(days=1), target_time)
+    await asyncio.sleep((target - now).total_seconds())
+
+# Планировщик с asyncio
+async def start_scheduler():
     while True:
-        await asyncio.sleep(10)
-    
+        # Запускаем задачу в 08:00
+        await wait_until(time(15, 00))
+        await job()
+
+        # Запускаем задачу в 20:00
+        await wait_until(time(20, 00))
+        await job()
