@@ -1,19 +1,29 @@
 import logging
-import asyncio
 import os
+import uvicorn
 from src.scheduler import start_scheduler  # Импортируем функцию из scheduler
 
-# Запуск асинхронной функции через asyncio
-async def main():
-    logging.info("Запуск бота и планировщика.")
-    
-    
-    PORT = os.getenv("PORT", 5000)
-    
-    # Открытие порта для HTTP-сервера или другой обработки HTTP-запросов
-    await start_scheduler()  # Ждем завершения работы планировщика
+from fastapi import FastAPI
 
-# Запуск главной асинхронной функции
+app = FastAPI()
+
+# Корень маршрута
+@app.get("/")
+def read_root():
+    logging.info("Обрабатывается запрос на корень")
+    return {"message": "Запуск бота и планировщика"}
+
+# Асинхронная функция для запуска бота и планировщика
+@app.get("/start")
+async def start_bot():
+    logging.info("Запуск бота и планировщика.")
+    port = os.getenv("PORT", 5000)  # Получаем порт из переменной окружения Render
+    PORT = int(port)  # Преобразуем значение в целое число
+    await start_scheduler()  # Ждем завершения работы планировщика
+    return {"message": "Бот запущен"}
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(main())  # Запуск асинхронной функции main()
+    
+    # Используем uvicorn для запуска приложения
+    uvicorn.run(app, host="0.0.0.0", port=int(os.getenv("PORT", 5000)))  # Подключение к порту из переменной окружения
