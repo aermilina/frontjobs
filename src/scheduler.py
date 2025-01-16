@@ -44,7 +44,7 @@ async def wait_until(target_time: time):
 async def start_scheduler():
     while True:
         # Запускаем задачу в 08:00
-        await wait_until(time(15, 00))
+        await wait_until(time(15, 40))
         await job()
 
         # Запускаем задачу в 20:00
