@@ -3,8 +3,9 @@ from datetime import datetime, time, timedelta
 from src.parsers.rss_parser import get_latest_vacancies
 from src.parsers.json_parser import get_latest_json_vacancies
 from src.parsers.hhparser import fetch_vacancies
+from src.parsers.workingnomads import get_working_nomads_vacancy
 from src.bot import send_message, get_updates
-from constants import RSS_FEEDS, KEYWORDS, JSON_FEED, HH_URL, TIMEOUT
+from constants import RSS_FEEDS, KEYWORDS, JSON_FEED, HH_URL, TIMEOUT, WORKINGNOMADS_URL
 
 # Асинхронная задача, которая будет выполняться по расписанию
 async def job():
@@ -20,6 +21,11 @@ async def job():
     # Получаем вакансии с JSON
     json_vacancies = get_latest_json_vacancies(JSON_FEED, KEYWORDS)
     for title, link in json_vacancies:
+        await send_message(title, link)
+        await asyncio.sleep(TIMEOUT)
+
+    working_nomads = get_working_nomads_vacancy(WORKINGNOMADS_URL, KEYWORDS)
+    for title, link in working_nomads:
         await send_message(title, link)
         await asyncio.sleep(TIMEOUT)
 
