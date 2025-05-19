@@ -2,6 +2,9 @@ import feedparser
 import logging 
 import os
 import requests
+from datetime import datetime
+from src.utils.lastpublished import  save_last_published_date
+from src.utils.dateutils import to_utc, is_newer, update_last_published_date
 
 
 # Путь для логов
@@ -22,14 +25,17 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger("RSSParser")
-last_published_date={}
 
-def get_latest_vacancies(RSS_FEEDS,KEYWORDS):
-    global last_published_date
+
+def get_latest_vacancies(RSS_FEEDS,KEYWORDS,last_published_date,LAST_PUBLISHED_FILE):
     new_vacancies=[]
 
     rss_feeds= RSS_FEEDS.split(',')
     keywords = KEYWORDS.split(',')
+
+    if last_published_date and last_published_date.tzinfo is None:
+        last_published_date = to_utc(last_published_date)
+
     for rss_url in rss_feeds:
         logger.info(f'Запрос ленты: {rss_url}')
         response = requests.get(rss_url, verify=False)
@@ -43,13 +49,19 @@ def get_latest_vacancies(RSS_FEEDS,KEYWORDS):
 
         for entry in feed.entries:
             published_date = entry.get("published_parsed", None)
+            if published_date:
+                published_date = to_utc(datetime(*published_date[:6])) 
         
-            if published_date and (rss_url not in last_published_date or published_date > last_published_date[rss_url]):
+            if published_date and is_newer(published_date, last_published_date):
                 if any(keyword in (entry.title.lower() + entry.description.lower()) for keyword in keywords):
                     new_vacancies.append((entry.title, entry.link))
     
     # Обновляем последнюю дату публикации
         if feed.entries:
-            last_published_date[rss_url] = max(entry.get("published_parsed") for entry in feed.entries if entry.get("published_parsed"))
-    
+            latest_date = max(
+                datetime(*entry.get("published_parsed")[:6]) for entry in feed.entries if entry.get("published_parsed")
+            )
+            last_published_date = update_last_published_date(last_published_date, latest_date)
+            save_last_published_date(last_published_date,LAST_PUBLISHED_FILE)  # Сохраняем обновлённую дату
+
     return new_vacancies

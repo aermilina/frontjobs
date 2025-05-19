@@ -1,13 +1,14 @@
 import requests
 import logging
 from datetime import datetime, timedelta
+from src.utils.lastpublished import save_last_published_date
+from src.utils.dateutils import to_utc, is_newer, update_last_published_date
 
 logger = logging.getLogger("JSONParser")
-last_published_date = None
+
 
 # Функция для получения вакансий за последний день
-def fetch_vacancies(HH_URL):
-    global last_published_date
+def fetch_vacancies(HH_URL, last_published_date,LAST_PUBLISHED_FILE):
     # Рассчитываем дату за последний день в формате ISO 8601
     yesterday = (datetime.now() - timedelta(days=1)).isoformat()
     logger.info(f'yesterday: {yesterday}')
@@ -43,9 +44,11 @@ def fetch_vacancies(HH_URL):
             # Process vacancies
             for item in data['items']:
                 published_date = datetime.fromisoformat(item['published_at'])
-                if new_last_published_date is None or published_date > new_last_published_date:
+                published_date = to_utc(published_date)
+
+                if is_newer(published_date, new_last_published_date):
                     vacancies.append((item['name'], item['alternate_url']))
-                    new_last_published_date = published_date
+                    new_last_published_date = update_last_published_date(new_last_published_date, published_date)
             
             # Check if there are more pages
             if params['page'] >= data['pages'] - 1:
@@ -57,5 +60,6 @@ def fetch_vacancies(HH_URL):
             break
 
     last_published_date = new_last_published_date
+    save_last_published_date(new_last_published_date,LAST_PUBLISHED_FILE)
     logger.info(f'last_published_date: {last_published_date}')
     return vacancies

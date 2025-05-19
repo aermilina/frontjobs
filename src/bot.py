@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 # Токен вашего бота
 bot = Bot(token=TELEGRAM_TOKEN)
 
+
 # Асинхронная функция для получения обновлений
 async def get_updates():
     try:
