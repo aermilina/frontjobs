@@ -33,7 +33,7 @@ def get_hiring_cafe_vacancies(api_url, KEYWORDS, last_published_date,LAST_PUBLIS
         logger.info(f'Запрос вакансий с {api_url}')
         response = requests.post(api_url, json=payload, headers=headers, timeout=10)
         response.raise_for_status()
-        logger.info(f"Ответ API: {response}")  # Логируем полный ответ API
+        
     except requests.RequestException as e:
         logger.error(f"Ошибка при запросе API {api_url}: {e}")
         return []
