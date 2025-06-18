@@ -19,7 +19,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-async def job() -> None:
+async def job():
     logger.info(f"[{datetime.now()}] Запуск саморекламы...")
     await send_selfpromo()
     """
@@ -117,5 +117,5 @@ async def start_scheduler():
         await job()
 
         # Запускаем задачу в 20:00
-        await wait_until(time(16,00))
+        await wait_until(time(18,00))
         await job()
