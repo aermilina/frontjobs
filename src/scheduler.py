@@ -117,5 +117,6 @@ async def start_scheduler():
         await job()
 
         # Запускаем задачу в 20:00
-        await wait_until(time(18,00))
+        logger.info('Запустил job')
+        await wait_until(time(18,10))
         await job()
