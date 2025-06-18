@@ -3,3 +3,5 @@ feedparser>=6.0.11        # Последняя стабильная версия
 requests>=2.32.0          # Для работы с HTTP-запросами
 python-dotenv==1.0.0       # Для работы с .env файлами
 dateparser>=1.0.0          # Для парсинга дат
+beautifulsoup4==4.12.3
+aiohttp==3.10.5

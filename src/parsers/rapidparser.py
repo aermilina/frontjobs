@@ -1,97 +1,165 @@
-import requests
+import aiohttp
 import logging
-from datetime import datetime
-from src.utils.lastpublished import save_last_published_date
-from src.utils.dateutils import to_utc, is_newer, update_last_published_date
+import os
+from datetime import datetime, timedelta
+from typing import List, Tuple, Optional, Dict
 from dateparser import parse
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+from src.utils.lastpublished import save_last_published_date, load_last_published_date
+from src.utils.dateutils import to_utc, is_newer, update_last_published_date
+from src.parsers.base_parser import VacancyParser
+from src.utils.cleandescription import cleandescription
+
+
+
+# Настройка логирования
+log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(
+    level=getattr(logging, log_level, logging.INFO),
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]
+)
 logger = logging.getLogger(__name__)
 
+class RapidParser(VacancyParser):
+    def __init__(
+        self,
+        url: str,
+        last_published_date: Optional[datetime],
+        last_published_file: str,
+        host: str = "",
+        key: str = ""
+    ):
+        super().__init__(last_published_date, last_published_file)
+        self.api_url = url
+        self.host = host
+        self.key = key
 
+    async def fetch_vacancies(self) -> List[Tuple[str, str, Dict]]:
+        """
+        Получает вакансии из API Rapid с фильтрацией по дате.
+        """
+        vacancies = []
+        new_last_published_date = self.last_published_date
 
+        if not self.api_url:
+            logger.error("RAPID_API_URL не указан")
+            return []
 
-def get_rapid_vacancies(rapidUrl, rapidHost, rapidKey, last_published_date,LAST_PUBLISHED_FILE):
-    """
-    Получение вакансий с Rapid API.
-    :param api_url: URL API для получения вакансий.
-    :param api_key: Ключ API для авторизации.
-    :param query: Ключевые слова для поиска вакансий.
-    :param location: Локация для поиска вакансий.
-    :param last_published_date: Последняя обработанная дата публикации.
-    :return: Список новых вакансий.
-    """
-    headers = {
-        "x-rapidapi-key": rapidKey,
-        "x-rapidapi-host": rapidHost
-    }
+        # Рассчитываем дату за вчера
+        yesterday = datetime.now() - timedelta(days=1)
+        logger.info(f"Дата начала поиска: {yesterday}")
+        logger.debug(f"Последняя сохранённая дата: {self.last_published_date}")
 
-    querystring = {
-        "query": "frontend",
-        "location": 'any',  # Поиск по всем локациям
-        "remoteOnly": "true",  # Только удалённые вакансии
-        "employmentTypes": "fulltime;parttime;intern;contractor",
-        "datePosted": "today",  # Все вакансии
-    }
+        headers = {}
+        if self.host and self.key:
+            headers = {
+                "x-rapidapi-key": self.key,
+                "x-rapidapi-host": self.host
+            }
 
-    try:
-        logger.info(f'Запрос вакансий с {rapidUrl}')
-        response = requests.get(rapidUrl, headers=headers, params=querystring, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        logger.info(f"Ответ API (JSON): {data}")
-    except requests.RequestException as e:
-        logger.error(f"Ошибка при запросе API {rapidUrl}: {e}")
-        return []
-    except ValueError as e:
-        logger.error(f"Ошибка при обработке JSON-ответа: {e}")
-        return []
+        querystring = {
+            "query": "frontend",
+            "location": "any",
+            "remoteOnly": "true",
+            "employmentTypes": "fulltime;parttime;intern;contractor",
+            "datePosted": "today"
+        }
 
-    vacancies = []
-
-    if not isinstance(data, dict) or 'jobs' not in data:
-        logger.error(f"Неожиданный формат данных API: {type(data)}")
-        return []
-
-    # Преобразуем last_published_date в UTC, если это необходимо
-    if last_published_date:
-        last_published_date = to_utc(last_published_date)
-
-   
-    new_last_published_date = last_published_date
-    results = data.get('jobs', [])
-    
-
-
-
-    for item in results:
-        title = item.get('title', 'Без названия')
-        logger.info(f"Обработка вакансии: {title}")
-        providers = item.get('jobProviders', [])
-        logger.info(f"Обработка вакансии: {providers}")
-        date_posted_str = item.get('datePosted', '')
-        logger.info(f"date_posted_str: {date_posted_str}")
-    
-
-        # Преобразуем дату публикации в UTC
-        if date_posted_str:
+        async with aiohttp.ClientSession() as session:
+            logger.info(f"Запрос к API Rapid: {self.api_url}, params={querystring}")
             try:
-                parsed_date = parse(date_posted_str, settings={'TIMEZONE': 'UTC', 'TO_TIMEZONE': 'UTC'})
-                logger.info(f"Дата публикации вакансии: {parsed_date}")
-                if parsed_date:
-                    date_published = to_utc(parsed_date)
-                    logger.info(f"Дата публикации вакансии: {date_published}")
-            except Exception as e:
-                logger.warning(f"Ошибка при обработке даты: {date_posted_str}, {e}")
+                async with session.request('GET', self.api_url, headers=headers, params=querystring, ssl=False, timeout=10) as response:
+                    content = await response.text()
+                    logger.debug(f"Содержимое ответа API: {content}")
+                    if response.status == 401:
+                        logger.error("Ошибка авторизации (401): Возможно, требуется валидный ключ API Rapid.")
+                        return []
+                    response.raise_for_status()
+                    try:
+                        data = await response.json()
+                    except ValueError as e:
+                        logger.error(f"Ошибка декодирования JSON: {e}, содержимое: {content}")
+                        return []
+                    logger.debug(f"Ответ API: {data}")
+            except aiohttp.ClientResponseError as e:
+                logger.error(f"HTTP-ошибка при запросе API {self.api_url}: {e.status}, {e.message}")
+                return []
+            except aiohttp.ClientError as e:
+                logger.error(f"Ошибка при запросе API {self.api_url}: {e}")
+                if "SSL" in str(e):
+                    logger.warning("SSL-ошибка. Проверка SSL отключена. Рекомендуется обновить сертификаты.")
+                return []
 
+            # Проверка структуры ответа
+            if not isinstance(data, dict) or 'jobs' not in data:
+                logger.error(f"Неожиданный формат данных API: {type(data)}")
+                return []
+            results = data.get('jobs', [])
+            logger.debug(f"Получено {len(results)} вакансий")
 
-        # Проверяем, новее ли дата
-        if date_published and is_newer(date_published, last_published_date):
-            link = providers[0].get('url', '#') if providers else 'No link'
-            vacancies.append((title,  link))
-            logger.info(f'Добавлена вакансия: {title}, {link}')
-            new_last_published_date = update_last_published_date(new_last_published_date, date_published)
+            for item in results:
+                title = item.get('title', 'Without title')
+                logger.info(f"Обработка вакансии: {title}")
+                providers = item.get('jobProviders', [])
+                date_posted_str = item.get('datePosted', '')
+                logger.info(f"date_posted_str: {date_posted_str}")
 
-    if new_last_published_date:
-        save_last_published_date(new_last_published_date,LAST_PUBLISHED_FILE)
+                # Парсинг даты
+                date_published = None
+                if date_posted_str:
+                    try:
+                        parsed_date = parse(date_posted_str, settings={'TIMEZONE': 'UTC', 'TO_TIMEZONE': 'UTC'})
+                        logger.info(f"Дата публикации вакансии: {parsed_date}")
+                        if parsed_date:
+                            date_published = to_utc(parsed_date)
+                            formatted_date = date_published.strftime('%d %B %Y')
+                            logger.info(f"Дата публикации вакансии (UTC): {date_published}")
+                    except Exception as e:
+                        logger.warning(f"Ошибка при обработке даты: {date_posted_str}, {e}")
 
-    return vacancies
+                # Метаданные (для совместимости с другими парсерами)
+                description = item.get('description', '')
+                cleaned_description = cleandescription(description)
+                company = item.get('company', 'Not specified')
+                salaryrange = item.get('salaryRange', 'Not specified')
+                if salaryrange:
+                    salary = salaryrange
+                else:
+                    salary = f'Not specified'
+
+                metadata = {
+                    "description": cleaned_description[:100] + "..." if len(cleaned_description) > 100 else cleaned_description,
+                    "company": company,
+                    "published_date": date_published.strftime('%Y-%m-%d %H:%M:%S') if date_published else "Not specified",
+                    "published_date_str": formatted_date,
+                    "salary": salary
+                }
+
+                # Фильтрация по дате
+                if date_published and is_newer(date_published, self.last_published_date):
+                    link = providers[0].get('url', '#') if providers else 'No link'
+                    vacancies.append((title, link, metadata))
+                    logger.info(f"Добавлена вакансия: {title}, {link}")
+                    new_last_published_date = update_last_published_date(new_last_published_date, date_published)
+                else:
+                    logger.debug(f"Вакансия '{title}' не прошла фильтрацию: date_published={date_published}, last_published_date={self.last_published_date}")
+
+        if new_last_published_date:
+            self.last_published_date = new_last_published_date
+            save_last_published_date(new_last_published_date, self.last_published_file)
+
+        logger.info(f"Итоговое количество вакансий: {len(vacancies)}")
+        return vacancies
+
+    def format_message(self, title: str, link: str, metadata: Dict) -> str:
+        """
+        Форматирует сообщение для Telegram.
+        """
+        return (
+            f"💼 **{title}**\n\n"
+            f"📅 Published: {metadata['published_date_str']}\n\n"
+            f"🏢 Company: {metadata['company']}\n\n"
+            f"📝 Description: {metadata['description']}\n\n"
+            f"💵 Salary: {metadata['salary']}\n\n"
+            f"👉[APPLY NOW]({link})"
+        )

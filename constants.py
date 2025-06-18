@@ -15,5 +15,6 @@ RAPIDHOST=os.getenv("RAPIDHOST")
 JOB_URL=os.getenv("JOBAPI_URL")
 TIMEOUT = 10
 WORKINGNOMADS_URL = os.getenv("WORKINGNOMADS")
+HF_URL = os.getenv("HF_URL")
 
 
