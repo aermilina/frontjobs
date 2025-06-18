@@ -112,14 +112,19 @@ async def wait_until(target_time: time) -> None:
 
 async def start_scheduler():
     while True:
-        # Ждём 08:00
-        logger.info("Ожидание 08:00")
-        await wait_until(time(8,0))
-        logger.info("Запускаю job в 08:00")
-        await job()
+        now = datetime.now().time()
 
-        # Ждём 20:00
-        logger.info("Ожидание 20:00")
-        await wait_until(time(18,25))
-        logger.info("Запускаю job в 20:00")
-        await job()
+        if now < time(8,0):
+            await wait_until(time(8,0))
+            logger.info("Запускаю job в 08:00")
+            await job()
+            await wait_until(time(18,30))
+            logger.info("Запускаю job в 20:00")
+            await job()
+        elif now < time(18,30):
+            await wait_until(time(18,30))
+            logger.info("Запускаю job в 20:00")
+            await job()
+            await wait_until(time(8,0))  # ждём следующий день 8:00
+        else:
+            await wait_until(time(8,0))  # ждём следующий день 8:00
