@@ -159,9 +159,9 @@ class HiringCafeParser(VacancyParser):
 
                 page += 1
 
-        if new_last_published_date:
-            self.last_published_date = new_last_published_date
-            save_last_published_date(new_last_published_date, self.last_published_file)
+        now = datetime.utcnow()
+        self.last_published_date = now
+        save_last_published_date(now, self.last_published_file)
 
         logger.info(f"Итоговое количество новых вакансий: {len(vacancies)}")
         return vacancies
