@@ -81,6 +81,8 @@ class JSONParser(VacancyParser):
 
                 # Парсинг даты
                 date_published = None
+                formatted_date = "Not specified"  # ← Значение по умолчанию
+
                 if pub_date_str:
                     try:
                         parsed_date = parse(pub_date_str, settings={'TIMEZONE': 'UTC', 'TO_TIMEZONE': 'UTC'})
@@ -95,7 +97,7 @@ class JSONParser(VacancyParser):
                 metadata = {
                     "description": description[:100] + "..." if len(description) > 100 else description,
                     "company": company,
-                    "published_date": date_published.strftime('%Y-%m-%d %H:%M:%S'),
+                    "published_date": date_published.strftime('%Y-%m-%d %H:%M:%S') if date_published else "Not specified",
                     "published_date_str": formatted_date,
                     "salary": salary
                 }

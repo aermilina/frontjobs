@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional
 
 def to_utc(date):
     """
@@ -10,14 +11,15 @@ def to_utc(date):
         return date.replace(tzinfo=timezone.utc)
     return date.astimezone(timezone.utc)
 
-def is_newer(date, last_date):
-    """
-    Проверяет, является ли дата новее последней сохранённой даты.
-    :param date: datetime объект.
-    :param last_date: datetime объект или None.
-    :return: True, если date > last_date или last_date == None.
-    """
-    return last_date is None or date > last_date
+def is_newer(date1: datetime, date2: Optional[datetime]) -> bool:
+    from datetime import timezone
+    if date2 is None:
+        return True
+    if date1.tzinfo is None:
+        date1 = date1.replace(tzinfo=timezone.utc)
+    if date2.tzinfo is None:
+        date2 = date2.replace(tzinfo=timezone.utc)
+    return date1 > date2
 
 def update_last_published_date(current_last_date, new_date):
     """

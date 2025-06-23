@@ -61,7 +61,7 @@ async def send_selfpromo() -> None:
         "Follow: @FrontendinRemote",
 
         "🧑‍💻 *Hey frontend devs!*\n\n"
-        "We collect remote jobs from HH, Global and other sources — so you don't have to.\n\n"
+        "We collect remote jobs from Remote OK, Remotive, We Work Remotely, Hiring Cafe, and other trusted sources — so you don't have to\n\n"
         "Stay updated: @FrontendinRemote"
     ]
     try:
