@@ -50,17 +50,18 @@ async def job():
             rss_date,
             RSS_FILE
         ),
-        WorkingNomadsParser(
-            WORKINGNOMADS_URL,
-            KEYWORDS,
-            nomads_date,
-            NOMADS_FILE
-        ),
         JSONParser(
             JSON_FEED,
             KEYWORDS,
             json_date,
             JSON_FILE
+        ),
+    
+        WorkingNomadsParser(
+            WORKINGNOMADS_URL,
+            KEYWORDS,
+            nomads_date,
+            NOMADS_FILE
         ),
         HHParser(
             HH_URL,
@@ -112,11 +113,11 @@ async def wait_until(target_time: time) -> None:
 
 async def start_scheduler():
     while True:
-            await wait_until(time(9,0))
+            await wait_until(time(12,54))
             logger.info("Запускаю job в 08:00")
             await job()
             
-            await wait_until(time(16,00))
+            await wait_until(time(20,00))
             logger.info("Запускаю job в 20:00")
             await job()
 
