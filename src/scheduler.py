@@ -113,7 +113,7 @@ async def wait_until(target_time: time) -> None:
 
 async def start_scheduler():
     while True:
-            await wait_until(time(9,0))
+            await wait_until(time(10,30))
             logger.info("Запускаю job в 08:00")
             await job()
             
