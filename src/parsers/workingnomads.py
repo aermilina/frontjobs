@@ -9,6 +9,9 @@ from src.utils.lastpublished import save_last_published_date
 from src.utils.dateutils import to_utc, is_newer, update_last_published_date
 from src.parsers.base_parser import VacancyParser
 from src.utils.cleandescription import cleandescription
+from src.utils.getflags import get_flag_emoji
+from src.utils.normalizetags import normalize_tags, normalize_tag
+from src.utils.escapehtml import escape_html
 
 
 load_dotenv()
@@ -75,6 +78,13 @@ class WorkingNomadsParser(VacancyParser):
                 tags_str = item.get('tags', '')  # Теги приходят как строка
 
                 tags = [tag.strip().lower() for tag in tags_str.split(',') if tag.strip()] if tags_str else []
+                location = item.get("location", "").strip()
+                flag = get_flag_emoji(location)
+                location_tag = normalize_tag(location)
+                normalized_tags = normalize_tags(tags)[:5]  # максимум 5 тегов
+
+                hashtags = [location_tag] if location_tag else []
+                hashtags += normalized_tags
 
             
 
@@ -98,7 +108,10 @@ class WorkingNomadsParser(VacancyParser):
                     "description": description[:100] + "..." if len(description) > 100 else description,
                     "company": item.get('company_name', 'None'),
                     "published_date": date_published.strftime('%Y-%m-%d %H:%M:%S'),
-                    "published_date_str": formatted_date
+                    "published_date_str": formatted_date,
+                    "location": location or "Not specified",
+                    "flag": flag or '',
+                    "hashtags": hashtags    
                 }
 
                 # Фильтрация по ключевым словам
@@ -118,10 +131,21 @@ class WorkingNomadsParser(VacancyParser):
             return vacancies
 
     def format_message(self, title: str, link: str, metadata: Dict) -> str:
+        hashtags = metadata.get("hashtags", [])
+        hashtags_str = " ".join(escape_html(tag) for tag in hashtags if tag)
+
+        title = escape_html(title)
+        description = escape_html(metadata["description"])
+        company = escape_html(metadata.get("company", "Not specified"))
+        location = escape_html(metadata.get("location", "Not specified"))
+        flag = metadata.get("flag", "")
+
         return (
-            f"🌍 **{title}** \n\n"
+            f"🌍 <b>{title}</b>\n"
+            f"📍 Location: {flag} {location}\n\n"
             f"📅 Published: {metadata['published_date_str']}\n\n"
-            f"🏢 Company: {metadata['company']}\n\n"
-            f"📝 Description: {metadata['description']}\n\n"
-            f"👉[APPLY NOW]({link})"
+            f"🏢 Company: {company}\n"
+            f"📝 Description: {description}\n\n"
+            f"👉 <a href=\"{link}\">APPLY NOW</a>\n\n"
+            f"{hashtags_str}"
         )

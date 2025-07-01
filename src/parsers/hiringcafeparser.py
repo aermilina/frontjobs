@@ -8,6 +8,9 @@ from src.utils.dateutils import to_utc, is_newer, update_last_published_date
 from src.parsers.base_parser import VacancyParser
 from dateparser import parse
 from src.utils.cleandescription import cleandescription
+from src.utils.getflags import get_flag_emoji
+from src.utils.normalizetags import normalize_tag
+from src.utils.escapehtml import escape_html
 
 
 # Настройка логирования
@@ -33,9 +36,6 @@ class HiringCafeParser(VacancyParser):
         self.workplace_type = 'remote'
 
     async def fetch_vacancies(self) -> List[Tuple[str, str, Dict]]:
-        """
-        Получает вакансии из API Hiring Cafe с фильтрацией по дате и ранним выходом из пагинации.
-        """
         vacancies = []
         new_last_published_date = self.last_published_date
 
@@ -59,7 +59,6 @@ class HiringCafeParser(VacancyParser):
                 logger.info(f"Запрос к API Hiring Cafe: {self.api_url}, страница {page}, payload={payload}")
                 try:
                     async with session.post(self.api_url, json=payload, ssl=False, timeout=10) as response:
-                        
                         content = await response.text()
                         if response.status == 401:
                             logger.error("Ошибка авторизации (401): Возможно, требуется токен API Hiring Cafe.")
@@ -84,7 +83,6 @@ class HiringCafeParser(VacancyParser):
                     return []
                 results = data.get('results', [])
 
-
                 if not results:
                     logger.info(f"Нет вакансий на странице {page}")
                     break
@@ -100,6 +98,7 @@ class HiringCafeParser(VacancyParser):
 
                     # Парсинг даты
                     date_published = None
+                    formatted_date = "Not specified"
                     if date_published_str:
                         try:
                             parsed_date = parse(date_published_str, settings={'TIMEZONE': 'UTC', 'TO_TIMEZONE': 'UTC'})
@@ -119,6 +118,22 @@ class HiringCafeParser(VacancyParser):
                     currency = processed_data.get('listed_compensation_currency', 'not specified')
                     languages = processed_data.get("language_requirements", [])
                     language_str = ", ".join(languages) if languages else "Not specified"
+
+                    location = processed_data.get('workplace_countries', [])
+                    location_name = location[0] if location else "Not specified"
+                    location_tag = normalize_tag(location_name)
+                    flag = get_flag_emoji(location_name)
+
+                    experience_tag = normalize_tag(experience.lower())
+                    language_tag = normalize_tag(language_str.lower())
+
+                    hashtags = []
+                    if location_name.lower() != "not specified" and location_tag:
+                        hashtags.append(location_tag)
+                    if experience_tag:
+                        hashtags.append(experience_tag)
+                    if language_tag:
+                        hashtags.append(language_tag)
 
                     if salaryrange:
                         salarymin = processed_data.get(f'{salaryrange.lower()}_min_compensation') or ''
@@ -141,10 +156,12 @@ class HiringCafeParser(VacancyParser):
                         "published_date": date_published.strftime('%Y-%m-%d %H:%M:%S') if date_published else "Not specified",
                         "published_date_str": formatted_date,
                         "salary": salary,
-                        "language": language_str
+                        "language": language_str,
+                        "location": location_name,
+                        "flag": flag or "",
+                        "hashtags": hashtags
                     }
 
-                    # Фильтрация по дате и типу работы
                     if date_published and is_newer(date_published, self.last_published_date) and 'remote' in workplace_type:
                         all_old = False
                         vacancies.append((title, link, metadata))
@@ -166,15 +183,28 @@ class HiringCafeParser(VacancyParser):
         logger.info(f"Итоговое количество новых вакансий: {len(vacancies)}")
         return vacancies
 
-
     def format_message(self, title: str, link: str, metadata: Dict) -> str:
+        hashtags = metadata.get("hashtags", [])
+        hashtags_str = " ".join(escape_html(tag) for tag in hashtags if tag)
+
+        title_html = escape_html(title)
+        description_html = escape_html(metadata.get("description", ""))
+        company_html = escape_html(metadata.get("company", "Not specified"))
+        location_html = escape_html(metadata.get("location", "Not specified"))
+        flag = metadata.get("flag", "")
+        experience_html = escape_html(metadata.get("experience", "Not specified"))
+        salary_html = escape_html(metadata.get("salary", "Not specified"))
+        language_html = escape_html(metadata.get("language", "Not specified"))
+
         return (
-            f"💼 **{title}**\n\n"
+            f"💼 <b>{title_html}</b>\n"
+            f"📍 Location: {flag} {location_html}\n\n"
             f"📅 Published: {metadata.get('published_date_str', 'Not specified')}\n\n"
-            f"⌛️ Experience: {metadata.get('experience', 'Not specified')}\n\n"
-            f"🏢 Company: {metadata.get('company', 'Not specified')}\n\n"
-            f"📝 Description: {metadata.get('description', '')}\n\n"
-            f"🔤 Language: {metadata.get('language', 'Not specified')}\n\n"
-            f"💵 Salary: {metadata.get('salary', 'Not specified')}\n\n"
-            f"👉[APPLY NOW]({link})"
+            f"⌛️ Experience: {experience_html}\n\n"
+            f"🏢 Company: {company_html}\n"
+            f"📝 Description:\n{description_html}\n\n"
+            f"🔤 Language: {language_html}\n\n"
+            f"💵 Salary: {salary_html}\n\n"
+            f"👉 <a href=\"{link}\">APPLY NOW</a>\n\n"
+            f"{hashtags_str}"
         )

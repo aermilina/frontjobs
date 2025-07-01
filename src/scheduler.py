@@ -97,27 +97,49 @@ async def job():
 
     logger.info(f"[{datetime.now()}] Задача завершена.")
 
-async def wait_until(target_time: time) -> None:
+async def wait_until(target_time: time, day: datetime.date = None):
     """
-    Ожидание до наступления указанного времени.
-    
-    :param target_time: Время в формате time для ожидания.
+    Ждёт до указанного времени (можно указать дату вручную).
     """
     now = datetime.now()
-    target = datetime.combine(now.date(), target_time)
-    if now > target:
-        target = datetime.combine(now.date() + timedelta(days=1), target_time)
-    seconds_to_wait = (target - now).total_seconds()
-    logger.debug(f"Ожидание {seconds_to_wait} секунд до {target_time}")
-    await asyncio.sleep(seconds_to_wait)
+    if day:
+        target = datetime.combine(day, target_time)
+    else:
+        target = datetime.combine(now.date(), target_time)
+
+    delay = (target - now).total_seconds()
+    if delay > 0:
+        logger.info(f"Ожидаю до {target.strftime('%Y-%m-%d %H:%M:%S')} ({int(delay)} сек.)")
+        await asyncio.sleep(delay)
 
 async def start_scheduler():
+    """
+    Планировщик: выполняет job в 14:10 и 20:00 каждый день.
+    """
     while True:
-            await wait_until(time(10,30))
-            logger.info("Запускаю job в 08:00")
-            await job()
-            
-            await wait_until(time(20,00))
-            logger.info("Запускаю job в 20:00")
-            await job()
+        now = datetime.now()
+
+        # Определяем время сегодняшних запусков
+        run_times = [
+            datetime.combine(now.date(), time(10, 0)),
+            datetime.combine(now.date(), time(20, 0)),
+        ]
+
+        # Выбираем ближайшее время запуска из оставшихся сегодня
+        next_run = None
+        for run_time in run_times:
+            if run_time > now:
+                next_run = run_time
+                break
+        
+        # Если сегодня все запуски прошли — берём 14:10 завтра
+        if next_run is None:
+            next_run = datetime.combine(now.date() + timedelta(days=1), time(8, 0))
+
+        delay = (next_run - now).total_seconds()
+        logger.info(f"Ожидаю до следующего запуска job: {next_run.strftime('%Y-%m-%d %H:%M:%S')} ({int(delay)} сек.)")
+        await asyncio.sleep(delay)
+
+        logger.info(f"⏰ Запуск job в {next_run.strftime('%H:%M')}")
+        await job()
 

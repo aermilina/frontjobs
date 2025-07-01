@@ -88,7 +88,7 @@ async def send_message(message: str) -> None:
         response = await bot.send_message(
             chat_id=CHANNEL_ID,
             text=message,
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=ParseMode.HTML,
             disable_web_page_preview=True
         )
         logger.info(f"Сообщение отправлено в канал {CHANNEL_ID}: {response.message_id}")

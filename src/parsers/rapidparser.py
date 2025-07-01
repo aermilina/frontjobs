@@ -8,6 +8,11 @@ from src.utils.lastpublished import save_last_published_date, load_last_publishe
 from src.utils.dateutils import to_utc, is_newer, update_last_published_date
 from src.parsers.base_parser import VacancyParser
 from src.utils.cleandescription import cleandescription
+from src.utils.normalizetags import normalize_tag
+from src.utils.escapehtml import escape_html
+from src.utils.normalizetags import normalize_tags
+from src.utils.getflags import get_flag_emoji
+
 
 
 
@@ -122,6 +127,13 @@ class RapidParser(VacancyParser):
                 cleaned_description = cleandescription(description)
                 company = item.get('company', 'Not specified')
                 salaryrange = item.get('salaryRange', 'Not specified')
+                location = item.get('location', 'Not specified')
+                flag = get_flag_emoji(location)
+                location_tag = normalize_tag(location)
+                hashtags = []
+                if location.lower() != "not specified" and location_tag:
+                    hashtags.append(location_tag)
+
                 if salaryrange:
                     salary = salaryrange
                 else:
@@ -132,7 +144,10 @@ class RapidParser(VacancyParser):
                     "company": company,
                     "published_date": date_published.strftime('%Y-%m-%d %H:%M:%S') if date_published else "Not specified",
                     "published_date_str": formatted_date,
-                    "salary": salary
+                    "salary": salary,
+                    "location": location,
+                    "flag": flag or "",
+                    "hashtags": hashtags
                 }
 
                 # Фильтрация по дате
@@ -152,14 +167,25 @@ class RapidParser(VacancyParser):
         return vacancies
 
     def format_message(self, title: str, link: str, metadata: Dict) -> str:
-        """
-        Форматирует сообщение для Telegram.
-        """
+        hashtags = metadata.get("hashtags", [])
+        hashtags_str = " ".join(escape_html(tag) for tag in hashtags if tag)
+
+        title_escaped = escape_html(title)
+        description = escape_html(metadata.get("description", ""))
+        company = escape_html(metadata.get("company", "Not specified"))
+        raw_location = metadata.get("location", "").strip()
+        location = escape_html(raw_location) if raw_location else "Not specified"
+        flag = metadata.get("flag", "")
+        salary = escape_html(metadata.get("salary", "Not specified"))
+        published_date_str = escape_html(metadata.get("published_date_str", "Not specified"))
+
         return (
-            f"💼 **{title}**\n\n"
-            f"📅 Published: {metadata['published_date_str']}\n\n"
-            f"🏢 Company: {metadata['company']}\n\n"
-            f"📝 Description: {metadata['description']}\n\n"
-            f"💵 Salary: {metadata['salary']}\n\n"
-            f"👉[APPLY NOW]({link})"
+            f"💼 <b>{title_escaped}</b>\n"
+            f"📍 Location: {flag} {location}\n\n"
+            f"📅 Published: {published_date_str}\n\n"
+            f"🏢 Company: {company}\n"
+            f"📝 Description: {description}\n\n"
+            f"💵 Salary: {salary}\n\n"
+            f"👉 <a href=\"{link}\">APPLY NOW</a>\n\n"
+            f"{hashtags_str}"
         )

@@ -4,11 +4,14 @@ import subprocess
 from datetime import datetime
 from typing import List, Tuple, Optional, Dict
 from urllib.parse import urlparse
-
+from src.utils.getflags import get_flag_emoji
 from src.utils.lastpublished import save_last_published_date
 from src.utils.dateutils import to_utc, is_newer, update_last_published_date
 from src.parsers.base_parser import VacancyParser
 from src.utils.cleandescription import cleandescription
+from src.utils.normalizetags import normalize_tag
+from src.utils.escapehtml import escape_html
+from src.utils.normalizetags import normalize_tags
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +73,14 @@ class RSSParser(VacancyParser):
                 link = entry.get('link', '#')
                 published_date = entry.get('published_parsed', None)
                 raw_description = entry.get('description', '')
-
+                location = None
+                for loc_key in ['pubPlace', 'region', 'location']:
+                    if loc_key in entry:
+                        location = entry.get(loc_key)
+                        if location:
+                            location = location.strip()
+                            break
+                flag = get_flag_emoji(location)
                 description = cleandescription(raw_description)
 
                 date_published = None
@@ -81,12 +91,25 @@ class RSSParser(VacancyParser):
                         formatted_date = date_published.strftime('%d %B %Y')
                     except Exception as e:
                         logger.warning(f"Ошибка обработки даты для {title}: {e}")
+                skills = []
+                if 'skills' in entry:
+                    skill_raw = entry.get('skills')
+                    if isinstance(skill_raw, str):
+                        skills = [skill.strip() for skill in skill_raw.split(',') if skill.strip()]
+                    elif isinstance(skill_raw, list):
+                        skills = [skill.strip() for skill in skill_raw if isinstance(skill, str)]
+                location_tag = normalize_tag(location)
+                skill_tags = normalize_tags(skills)
+                hashtags = [location_tag] + skill_tags
 
                 metadata = {
                     "source": "RSS",
                     "description": description[:100] + "..." if len(description) > 100 else description,
                     "published_date": date_published.strftime('%Y-%m-%d %H:%M:%S') if date_published else "None",
-                    "published_date_str": formatted_date
+                    "published_date_str": formatted_date,
+                    "location": location or "Not specified",
+                    "flag": flag or '',
+                    "hashtags": hashtags or []
                 }
 
                 vacancy = (title, link, metadata)
@@ -105,9 +128,22 @@ class RSSParser(VacancyParser):
         return vacancies
 
     def format_message(self, title: str, link: str, metadata: Dict) -> str:
+        hashtags = metadata.get("hashtags", [])
+        hashtags_str = " ".join(escape_html(tag or "") for tag in hashtags if tag)
+        title = escape_html(title or '')
+        desc_raw = metadata['description']
+        if len(desc_raw) > 100:
+            description = escape_html(desc_raw[:100].rstrip() + "…")
+        else:
+            description = escape_html(desc_raw or "")
+        location = escape_html(metadata['location'] or "")
+        flag = metadata.get("flag", "")
+        link = escape_html(link or "")
         return (
-            f"📰 **{title}**\n\n"
-            f"📅 Published: {metadata['published_date_str']}\n\n"
-            f"📝 Description: {metadata['description']}\n\n"
-            f"👉[APPLY NOW]({link})"
-        )
+         f"📰 <b>{title}</b>\n"
+        f"📍 Location: {flag} {location}\n\n"
+        f"📅 Published: {metadata['published_date_str']}\n\n"
+        f"📝 Description: {description}\n\n"
+        f"👉<a href=\"{link}\">APPLY NOW</a>\n\n"
+        f"{hashtags_str}"
+    )

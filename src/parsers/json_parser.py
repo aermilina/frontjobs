@@ -8,6 +8,9 @@ from src.utils.lastpublished import save_last_published_date
 from src.utils.dateutils import to_utc, is_newer, update_last_published_date
 from src.parsers.base_parser import VacancyParser
 from src.utils.cleandescription import cleandescription
+from src.utils.getflags import get_flag_emoji
+from src.utils.normalizetags import normalize_tags, normalize_tag
+from src.utils.escapehtml import escape_html
 
 
 # Настройка логирования
@@ -73,6 +76,14 @@ class JSONParser(VacancyParser):
                 company = item.get('company', 'None')
                 salarymin = item.get('salary_min','None')
                 salarymax = item.get ('salary_max','None')
+                raw_tags = item.get('tags', []) or []
+                normalized_tags = normalize_tags(raw_tags)[:5]  # только 5, нормализуем
+                location = item.get("location", "").strip()
+                flag = get_flag_emoji(location)
+                location_tag = normalize_tag(location)
+
+                hashtags = [location_tag] if location_tag else []
+                hashtags += normalized_tags
 
                 # Очистка HTML из описания
                 description = cleandescription(raw_description)
@@ -99,7 +110,10 @@ class JSONParser(VacancyParser):
                     "company": company,
                     "published_date": date_published.strftime('%Y-%m-%d %H:%M:%S') if date_published else "Not specified",
                     "published_date_str": formatted_date,
-                    "salary": salary
+                    "salary": salary,
+                    "hashtags": hashtags,     # ← для Telegram
+                    "location": location or "Not specified",
+                    "flag": flag or ''
                 }
 
                 # Фильтрация
@@ -117,15 +131,26 @@ class JSONParser(VacancyParser):
 
         return vacancies
 
+    from src.utils.escapehtml import escape_html
+
     def format_message(self, title: str, link: str, metadata: Dict) -> str:
-        """
-        Форматирует сообщение для Telegram.
-        """
+        hashtags = metadata.get("hashtags", [])
+        hashtags_str = " ".join(escape_html(tag) for tag in hashtags if tag)
+
+        title = escape_html(title)
+        description = escape_html(metadata["description"])
+        company = escape_html(metadata.get("company", "Not specified"))
+        salary = escape_html(metadata.get("salary", "Not specified"))
+        location = escape_html(metadata.get("location", "Not specified"))
+        flag = metadata.get("flag", "")
+
         return (
-            f"📡 **{title}**\n\n"
+            f"📡 <b>{title}</b>\n"
+            f"📍 Location: {flag} {location}\n\n"
             f"📅 Published: {metadata['published_date_str']}\n\n"
-            f"🏢 Company: {metadata['company']}\n\n"
-            f"📝 Description: {metadata['description']}\n\n"
-            f"💵 Estimated salary: {metadata['salary']}\n\n"
-            f"👉[APPLY NOW]({link})"
+            f"🏢 Company: {company}\n"
+            f"📝 Description: {description}\n\n"
+            f"💵 Estimated salary: {salary}\n\n"
+            f"👉 <a href=\"{link}\">APPLY NOW</a>\n\n"
+            f"{hashtags_str}"
         )
