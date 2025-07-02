@@ -134,7 +134,7 @@ async def start_scheduler():
         
         # Если сегодня все запуски прошли — берём 14:10 завтра
         if next_run is None:
-            next_run = datetime.combine(now.date() + timedelta(days=1), time(8, 0))
+            next_run = datetime.combine(now.date() + timedelta(days=1), time(10, 0))
 
         delay = (next_run - now).total_seconds()
         logger.info(f"Ожидаю до следующего запуска job: {next_run.strftime('%Y-%m-%d %H:%M:%S')} ({int(delay)} сек.)")
